@@ -1,12 +1,12 @@
 # WireGuard Implementation for lwIP
 
-This project is a C implementation of the [WireGuard protocol](https://www.wireguard.com) intended to be used with the [lwIP IP stack](https://www.nongnu.org/lwip/)
+This project is a C implementation of the [WireGuard&reg;](https://www.wireguard.com/) protocol intended to be used with the [lwIP IP stack](https://www.nongnu.org/lwip/)
 
 # Motivation
 
-There is a desire to use secure communication in smaller embedded devices to communicate with off-premises devices; WireGuard seems perfect for this task due to its small code base and secure nature
+There is a desire to use secure communication in smaller embedded devices to communicate with off-premises devices; WireGuard&reg; seems perfect for this task due to its small code base and secure nature
 
-This project tackles the problem of using WireGuard on embedded systems in that it is:
+This project tackles the problem of using WireGuard&reg; on embedded systems in that it is:
 - malloc-free so fits into a fixed RAM size
 - written entirely in C
 - has low memory requirements in terms of stack size, flash storage and RAM
@@ -16,7 +16,7 @@ This project tackles the problem of using WireGuard on embedded systems in that 
 
 The code is split into four main portions
 
-- wireguard.c contains the bulk of the WireGuard protocol code and is not specific to any particular IP stack
+- wireguard.c contains the bulk of the WireGuard&reg; protocol code and is not specific to any particular IP stack
 - wireguardif.c contains the lwIP integration code and makes a netif network interface and handles periodic tasks such as keepalive/xpiration timers
 - wireguard-platform.h contains the definition of the four functions to be implemented per platform (a sample implementation is given in wireguard-platform.sample)
 - crypto code (see below)
@@ -43,9 +43,59 @@ You will need to implement a platform file that provides four functions
 - an indication of whether the system is currently under load and should generate cookie reply messages
 - a good random number generator
 
+# lwIP Code Example
+(note error checking omitted)
+
+    static struct netif wg_netif_struct = {0};
+    static struct netif *wg_netif = NULL;
+    static uint8_t wireguard_peer_index = WIREGUARDIF_INVALID_INDEX;
+
+    static void wireguard_setup() {
+    	struct wireguard_interface wg;
+    	struct wireguardif_peer peer;
+    	ip_addr_t ipaddr;
+    	ip_addr_t netmask;
+    	ip_addr_t gateway;
+
+    	IP4_ADDR(&ipaddr, 192, 168, 40, 10);
+    	IP4_ADDR(&netmask, 255, 255, 255, 0);
+    	IP4_ADDR(&gateway, 192, 168, 40, 1);
+
+    	wg.private_key = "8BU1giso23adjCk93dnpLJnK788bRAtpZxs8d+Jo+Vg=";
+    	wg.listen_port = 51820;
+    	wg.bind_netif = NULL;
+
+
+    	wg_netif = netif_add(&wg_netif_struct, &ipaddr, &netmask, &gateway, &wg, &wireguardif_init, &ip_input);
+
+    	netif_set_up(wg_netif);
+
+    	wireguardif_peer_init(&peer);
+
+    	peer.public_key = "cDfetaDFWnbxts2Pbz4vFYreikPEEVhTlV/sniIEBjo=";
+    	peer.preshared_key = NULL;
+    	// Allow all IPs through tunnel
+    	IP4_ADDR(&peer.allowed_ip, 0, 0, 0, 0);
+    	IP4_ADDR(&peer.allowed_mask, 0, 0, 0, 0);
+
+    	// If we know the endpoint's address can add here
+    	IP4_ADDR(&peer.endpoint_ip, 10, 0, 0, 12);
+    	peer.endport_port = 12345;
+
+    	wireguardif_add_peer(wg_netif, &peer, &wireguard_peer_index);
+
+    	if ((wireguard_peer_index != WIREGUARDIF_INVALID_INDEX) && !ip_addr_isany(&peer.endpoint_ip)) {
+    		// Start outbound connection to peer
+    		wireguardif_connect(wg_net, wireguard_peer_index);
+    	}
+    }
+
+
 # More Information
 
-Wireguard was created and developed by Jason A. Donenfeld. See https://www.wireguard.com/ for more information
+WireGuard&reg; was created and developed by Jason A. Donenfeld. See https://www.wireguard.com/ for more information
+
+This project is not approved, sponsored or affiliated with WireGuard or with the community.
 
 - The whitepaper https://www.wireguard.com/papers/wireguard.pdf
 - The Wikipedia page https://en.wikipedia.org/wiki/WireGuard 
