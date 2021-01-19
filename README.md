@@ -59,18 +59,18 @@ You will need to implement a platform file that provides four functions
     	ip_addr_t netmask = IPADDR4_INIT_BYTES(255, 255, 255, 0);
     	ip_addr_t gateway = IPADDR4_INIT_BYTES(192, 168, 40, 1);
 
-        // Setup the WireGuard device structure
+    	// Setup the WireGuard device structure
     	wg.private_key = "8BU1giso23adjCk93dnpLJnK788bRAtpZxs8d+Jo+Vg=";
     	wg.listen_port = 51820;
     	wg.bind_netif = NULL;
 
-        // Register the new WireGuard network interface with lwIP
+    	// Register the new WireGuard network interface with lwIP
     	wg_netif = netif_add(&wg_netif_struct, &ipaddr, &netmask, &gateway, &wg, &wireguardif_init, &ip_input);
 
-        // Mark the interface as administratively up, link up flag is set automatically when peer connects
+    	// Mark the interface as administratively up, link up flag is set automatically when peer connects
     	netif_set_up(wg_netif);
 
-        // Initialise the first WireGuard peer structure
+    	// Initialise the first WireGuard peer structure
     	wireguardif_peer_init(&peer);
     	peer.public_key = "cDfetaDFWnbxts2Pbz4vFYreikPEEVhTlV/sniIEBjo=";
     	peer.preshared_key = NULL;
@@ -82,7 +82,7 @@ You will need to implement a platform file that provides four functions
     	peer.endpoint_ip = IPADDR4_INIT_BYTES(10, 0, 0, 12);
     	peer.endport_port = 12345;
 
-        // Register the new WireGuard peer with the netwok interface
+    	// Register the new WireGuard peer with the netwok interface
     	wireguardif_add_peer(wg_netif, &peer, &wireguard_peer_index);
 
     	if ((wireguard_peer_index != WIREGUARDIF_INVALID_INDEX) && !ip_addr_isany(&peer.endpoint_ip)) {
