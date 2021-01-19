@@ -46,6 +46,8 @@ You will need to implement a platform file that provides four functions
 # lwIP Code Example
 (note error checking omitted)
 
+    #include "wireguardif.h"
+    
     static struct netif wg_netif_struct = {0};
     static struct netif *wg_netif = NULL;
     static uint8_t wireguard_peer_index = WIREGUARDIF_INVALID_INDEX;
@@ -53,35 +55,34 @@ You will need to implement a platform file that provides four functions
     static void wireguard_setup() {
     	struct wireguard_interface wg;
     	struct wireguardif_peer peer;
-    	ip_addr_t ipaddr;
-    	ip_addr_t netmask;
-    	ip_addr_t gateway;
+    	ip_addr_t ipaddr = IPADDR4_INIT_BYTES(192, 168, 40, 10);
+    	ip_addr_t netmask = IPADDR4_INIT_BYTES(255, 255, 255, 0);
+    	ip_addr_t gateway = IPADDR4_INIT_BYTES(192, 168, 40, 1);
 
-    	IP4_ADDR(&ipaddr, 192, 168, 40, 10);
-    	IP4_ADDR(&netmask, 255, 255, 255, 0);
-    	IP4_ADDR(&gateway, 192, 168, 40, 1);
-
+        // Setup the WireGuard device structure
     	wg.private_key = "8BU1giso23adjCk93dnpLJnK788bRAtpZxs8d+Jo+Vg=";
     	wg.listen_port = 51820;
     	wg.bind_netif = NULL;
 
-
+        // Register the new WireGuard network interface with lwIP
     	wg_netif = netif_add(&wg_netif_struct, &ipaddr, &netmask, &gateway, &wg, &wireguardif_init, &ip_input);
 
+        // Mark the interface as administratively up, link up flag is set automatically when peer connects
     	netif_set_up(wg_netif);
 
+        // Initialise the first WireGuard peer structure
     	wireguardif_peer_init(&peer);
-
     	peer.public_key = "cDfetaDFWnbxts2Pbz4vFYreikPEEVhTlV/sniIEBjo=";
     	peer.preshared_key = NULL;
     	// Allow all IPs through tunnel
-    	IP4_ADDR(&peer.allowed_ip, 0, 0, 0, 0);
-    	IP4_ADDR(&peer.allowed_mask, 0, 0, 0, 0);
+    	peer.allowed_ip = IPADDR4_INIT_BYTES(0, 0, 0, 0);
+    	peer.allowed_mask = IPADDR4_INIT_BYTES(0, 0, 0, 0);
 
     	// If we know the endpoint's address can add here
-    	IP4_ADDR(&peer.endpoint_ip, 10, 0, 0, 12);
+    	peer.endpoint_ip = IPADDR4_INIT_BYTES(10, 0, 0, 12);
     	peer.endport_port = 12345;
 
+        // Register the new WireGuard peer with the netwok interface
     	wireguardif_add_peer(wg_netif, &peer, &wireguard_peer_index);
 
     	if ((wireguard_peer_index != WIREGUARDIF_INVALID_INDEX) && !ip_addr_isany(&peer.endpoint_ip)) {
@@ -93,7 +94,7 @@ You will need to implement a platform file that provides four functions
 
 # More Information
 
-WireGuard&reg; was created and developed by Jason A. Donenfeld. See https://www.wireguard.com/ for more information
+WireGuard&reg; was created and developed by Jason A. Donenfeld. "WireGuard" and the "WireGuard" logo are registered trademarks of Jason A. Donenfeld. See https://www.wireguard.com/ for more information
 
 This project is not approved, sponsored or affiliated with WireGuard or with the community.
 

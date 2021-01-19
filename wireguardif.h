@@ -117,7 +117,7 @@ err_t wireguardif_add_peer(struct netif *netif, struct wireguardif_peer *peer, u
 err_t wireguardif_remove_peer(struct netif *netif, u8_t peer_index);
 
 // Update the "connect" IP of the given peer
-err_t wireguardif_update_endpoint(struct netif *netif, u8_t peer_index, ip_addr_t *ip, u16_t port);
+err_t wireguardif_update_endpoint(struct netif *netif, u8_t peer_index, const ip_addr_t *ip, u16_t port);
 
 // Try and connect to the given peer
 err_t wireguardif_connect(struct netif *netif, u8_t peer_index);
@@ -126,6 +126,6 @@ err_t wireguardif_connect(struct netif *netif, u8_t peer_index);
 err_t wireguardif_disconnect(struct netif *netif, u8_t peer_index);
 
 // Is the given peer "up"? A peer is up if it has a valid session key it can communicate with
-err_t wireguardif_peer_is_up(struct netif *netif, u8_t peer_index);
+err_t wireguardif_peer_is_up(struct netif *netif, u8_t peer_index, ip_addr_t *current_ip, u16_t *current_port);
 
 #endif /* _WIREGUARDIF_H_ */

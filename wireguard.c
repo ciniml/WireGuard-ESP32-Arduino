@@ -1078,3 +1078,39 @@ bool wireguard_base64_decode(const char *str, uint8_t *out, size_t *outlen) {
 	*outlen = len;
 	return result;
 }
+
+bool wireguard_base64_encode(const uint8_t *in, size_t inlen, char *out, size_t *outlen) {
+	bool result = false;
+	int read_offset = 0;
+	int write_offset = 0;
+	uint8_t byte1, byte2, byte3;
+	uint32_t tmp;
+	char c;
+	size_t len = 4 * ((inlen + 2) / 3);
+	int padding = (3 - (inlen % 3));
+	if (padding > 2) padding = 0;
+	if (*outlen > len) {
+
+		while (read_offset < inlen) {
+			// Read three bytes
+			byte1 = (read_offset < inlen) ? in[read_offset++] : 0;
+			byte2 = (read_offset < inlen) ? in[read_offset++] : 0;
+			byte3 = (read_offset < inlen) ? in[read_offset++] : 0;
+			// Turn into 24 bit intermediate
+			tmp = (byte1 << 16) | (byte2 << 8) | (byte3);
+			// Write out 4 characters each representing 6 bits of input
+			out[write_offset++] = base64_lookup[(tmp >> 18) & 0x3F];
+			out[write_offset++] = base64_lookup[(tmp >> 12) & 0x3F];
+			c = (write_offset < len - padding) ? base64_lookup[(tmp >> 6) & 0x3F] : '=';
+			out[write_offset++] = c;
+			c = (write_offset < len - padding) ? base64_lookup[(tmp) & 0x3F] : '=';
+			out[write_offset++] = c;
+		}
+		out[len] = '\0';
+		*outlen = len;
+		result = true;
+	} else {
+		// Not enough data to put in base64 and null terminate
+	}
+	return result;
+}
