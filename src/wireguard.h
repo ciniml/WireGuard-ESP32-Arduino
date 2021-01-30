@@ -46,10 +46,6 @@
 // Platform-specific functions that need to be implemented per-platform
 #include "wireguard-platform.h"
 
-// Peers are allocated statically inside the device structure to avoid malloc
-#define WIREGUARD_MAX_PEERS 1
-#define WIREGUARD_MAX_SRC_IPS 2
-
 // tai64n contains 64-bit seconds and 32-bit nano offset (12 bytes)
 #define WIREGUARD_TAI64N_LEN		(12)
 // Auth algorithm is chacha20pol1305 which is 128bit (16 byte) authenticator
@@ -74,9 +70,6 @@
 #define REJECT_AFTER_TIME			(180)
 #define REKEY_TIMEOUT				(5)
 #define KEEPALIVE_TIMEOUT			(10)
-
-// Per device limit on accepting (valid) initiation requests - per peer
-#define MAX_INITIATIONS_PER_SECOND	(2)
 
 struct wireguard_keypair {
 	bool valid;

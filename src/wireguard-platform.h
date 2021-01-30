@@ -37,6 +37,13 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
+// Peers are allocated statically inside the device structure to avoid malloc
+#define WIREGUARD_MAX_PEERS 1
+#define WIREGUARD_MAX_SRC_IPS 2
+
+// Per device limit on accepting (valid) initiation requests - per peer
+#define MAX_INITIATIONS_PER_SECOND	(2)
+
 //
 // Your platform integration needs to provide implementations of these functions
 //
