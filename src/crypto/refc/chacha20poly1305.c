@@ -38,7 +38,7 @@
 
 #include <stdlib.h>
 #include <stdint.h>
-#include "crypto.h"
+#include "../../crypto.h"
 
 #define POLY1305_KEY_SIZE		32
 #define POLY1305_MAC_SIZE		16

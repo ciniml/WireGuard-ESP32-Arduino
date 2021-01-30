@@ -1,7 +1,7 @@
 // Taken from RFC7693 - https://tools.ietf.org/html/rfc7693
 
 #include "blake2s.h"
-#include "crypto.h"
+#include "../../crypto.h"
 
 // Cyclic right rotation.
 

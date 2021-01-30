@@ -1,0 +1,21 @@
+Curve25519 for ARM Cortex-M0 from https://munacl.cryptojedi.org/index.shtml
+
+Public Domain
+
+Introduction
+
+μNaCl (pronounced "microsalt") is a project to bring the crypto part of the Networking and Cryptography library (NaCl) to embedded microcontrollers. At the moment the only full implementation of μNaCl is targeting 8-bit AVR ATmega microcontrollers. Work on NaCl for TI MSP430 and ARM Cortex-M0 is in progress and this websites already provides standalone implementations of Curve25519 for those architectures.
+
+Contributors
+
+The core μNaCl development team consists of Michael Hutter and Peter Schwabe.
+
+μNaCl benefits from contributions by and collaboration with other people. The standalone Curve25519 implementation for TI MSP430 is by Gesine Hinterwälder (Ruhr University Bochum). The standalone Curve25519 implementation for ARM Cortex-M0 is by Björn Haase and Ana Helena Sánchez.
+
+Acknowledgements
+
+Work on μNaCl is supported by the Austrian Science Fund (FWF) under the grant number TRP251-N23 and by the Netherlands Organisation for Scientific Research (NWO) through Veni 2013 project 13114.
+
+Part of the work on μNaCl was done when Michael Hutter and Peter Schwabe were on an invited research visit at Academia Sinica, Taiwan. They thank Bo-Yin Yang for his hospitality.
+
+

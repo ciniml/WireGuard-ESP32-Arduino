@@ -39,7 +39,7 @@
 
 #include <string.h>
 #include <stdint.h>
-#include "crypto.h"
+#include "../../crypto.h"
 
 // 2.3.  The ChaCha20 Block Function
 // The first four words (0-3) are constants: 0x61707865, 0x3320646e, 0x79622d32, 0x6b206574

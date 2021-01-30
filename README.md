@@ -17,23 +17,24 @@ This project tackles the problem of using WireGuard&reg; on embedded systems in 
 The code is split into four main portions
 
 - wireguard.c contains the bulk of the WireGuard&reg; protocol code and is not specific to any particular IP stack
-- wireguardif.c contains the lwIP integration code and makes a netif network interface and handles periodic tasks such as keepalive/xpiration timers
+- wireguardif.c contains the lwIP integration code and makes a netif network interface and handles periodic tasks such as keepalive/expiration timers
 - wireguard-platform.h contains the definition of the four functions to be implemented per platform (a sample implementation is given in wireguard-platform.sample)
 - crypto code (see below)
 
 ## Crypto Code
 
 The supplied cryptographic routines are written entirely in C and are not optimised for any particular platform. These work and use little memory but will probably be slow on your platform.
-You probably want to swap them out for optimised C or assembly versions
 
-The crypto routines are:
+You probably want to swap out the suplied versions for optimised C or assembly versions or those available throught the O/S or crypto libraries on your platform. Simply edit the crypto.h header file to point at the routines you want to use.
+
+The crypto routines supplied are:
 - BLAKE2S - adapted from the implementation in the RFC itself at https://tools.ietf.org/html/rfc7693
 - CHACHA20 - adapted from code at https://cr.yp.to/streamciphers/timings/estreambench/submissions/salsa20/chacha8/ref/chacha.c
 - HCHACHA20 - implemented from scratch following description here https://tools.ietf.org/id/draft-arciszewski-xchacha-02.html
 - POLY1305 - taken from https://github.com/floodyberry/poly1305-donna
 - CHACHA20POLY1305 - implemented from scratch following description here https://tools.ietf.org/html/rfc7539
 - AEAD_XChaCha20_Poly1305 - implemented from scratch following description here https://tools.ietf.org/id/draft-arciszewski-xchacha-02.html
-- X25519 - taken from STROBE prject at https://sourceforge.net/p/strobe
+- X25519 - taken from STROBE project at https://sourceforge.net/p/strobe, in addition there is a version optimised for Cortex-M0 processors which requires very little stack taken from https://munacl.cryptojedi.org/curve25519-cortexm0.shtml
 
 # Integrating into your platform
 
