@@ -9,4 +9,4 @@ idf_component_register(
          "src/crypto/refc/poly1305-donna.c"
          "src/crypto/refc/x25519.c"
     INCLUDE_DIRS "src"
-    REQUIRES lwip)
+    REQUIRES lwip mbedtls)
