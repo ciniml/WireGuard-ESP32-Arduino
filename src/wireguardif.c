@@ -44,18 +44,19 @@
 
 #include "wireguard.h"
 #include "crypto.h"
-
-#include <stdio.h> // TODO: Remove
+#include "esp_log.h"
+#include "esp_netif.h"
 
 #define WIREGUARDIF_TIMER_MSECS 400
 
+#define TAG "wireguard"
 
 static void update_peer_addr(struct wireguard_peer *peer, const ip_addr_t *addr, u16_t port) {
 	peer->ip = *addr;
 	peer->port = port;
 }
 
-static struct wireguard_peer *peer_lookup_by_allowed_ip(struct wireguard_device *device, const ip4_addr_t *ipaddr) {
+static struct wireguard_peer *peer_lookup_by_allowed_ip(struct wireguard_device *device, const ip_addr_t *ipaddr) {
 	struct wireguard_peer *result = NULL;
 	struct wireguard_peer *tmp;
 	int x;
@@ -64,7 +65,7 @@ static struct wireguard_peer *peer_lookup_by_allowed_ip(struct wireguard_device 
 		tmp = &device->peers[x];
 		if (tmp->valid) {
 			for (y=0; y < WIREGUARD_MAX_SRC_IPS; y++) {
-				if ((tmp->allowed_source_ips[y].valid) && ip_addr_netcmp(ipaddr, &tmp->allowed_source_ips[y].ip, &tmp->allowed_source_ips[y].mask)) {
+				if ((tmp->allowed_source_ips[y].valid) && ip_addr_netcmp(ipaddr, &tmp->allowed_source_ips[y].ip, ip_2_ip4(&tmp->allowed_source_ips[y].mask))) {
 					result = tmp;
 					break;
 				}
@@ -82,14 +83,14 @@ static err_t wireguardif_peer_output(struct netif *netif, struct pbuf *q, struct
 	struct wireguard_device *device = (struct wireguard_device *)netif->state;
 	// Send to last know port, not the connect port
 	//TODO: Support DSCP and ECN - lwip requires this set on PCB globally, not per packet
-	return udp_sendto(device->udp_pcb, q, &peer->ip, peer->port);
+	return udp_sendto_if(device->udp_pcb, q, &peer->ip, peer->port, device->underlying_netif);
 }
 
-static err_t wireguardif_device_output(struct wireguard_device *device, struct pbuf *q, const ip4_addr_t *ipaddr, u16_t port) {
-	return udp_sendto(device->udp_pcb, q, ipaddr, port);
+static err_t wireguardif_device_output(struct wireguard_device *device, struct pbuf *q, const ip_addr_t *ipaddr, u16_t port) {
+	return udp_sendto_if(device->udp_pcb, q, ipaddr, port, device->underlying_netif);
 }
 
-static err_t wireguardif_output_to_peer(struct netif *netif, struct pbuf *q, const ip4_addr_t *ipaddr, struct wireguard_peer *peer) {
+static err_t wireguardif_output_to_peer(struct netif *netif, struct pbuf *q, const ip_addr_t *ipaddr, struct wireguard_peer *peer) {
 	// The LWIP IP layer wants to send an IP packet out over the interface - we need to encrypt and send it to the peer
 	struct message_transport_data *hdr;
 	struct pbuf *pbuf;
@@ -127,6 +128,7 @@ static err_t wireguardif_output_to_peer(struct netif *netif, struct pbuf *q, con
 			// The IP packet consists of 16 byte header (struct message_transport_data), data padded upto 16 byte boundary + encrypted auth tag (16 bytes)
 			pbuf = pbuf_alloc(PBUF_TRANSPORT, header_len + padded_len + WIREGUARD_AUTHTAG_LEN, PBUF_RAM);
 			if (pbuf) {
+				ESP_LOGI(TAG, "preparing transport data...");
 				// Note: allocating pbuf from RAM above guarantees that the pbuf is in one section and not chained
 				// - i.e payload points to the contiguous memory region
 				memset(pbuf->payload, 0, pbuf->tot_len);
@@ -187,12 +189,14 @@ static err_t wireguardif_output_to_peer(struct netif *netif, struct pbuf *q, con
 
 // This is used as the output function for the Wireguard netif
 // The ipaddr here is the one inside the VPN which we use to lookup the correct peer/endpoint
-static err_t wireguardif_output(struct netif *netif, struct pbuf *q, const ip4_addr_t *ipaddr) {
+static err_t wireguardif_output(struct netif *netif, struct pbuf *q, const ip4_addr_t *ip4addr) {
 	struct wireguard_device *device = (struct wireguard_device *)netif->state;
 	// Send to peer that matches dest IP
-	struct wireguard_peer *peer = peer_lookup_by_allowed_ip(device, ipaddr);
+	ip_addr_t ipaddr;
+	ip_addr_copy_from_ip4(ipaddr, *ip4addr);
+	struct wireguard_peer *peer = peer_lookup_by_allowed_ip(device, &ipaddr);
 	if (peer) {
-		return wireguardif_output_to_peer(netif, q, ipaddr, peer);
+		return wireguardif_output_to_peer(netif, q, &ipaddr, peer);
 	} else {
 		return ERR_RTE;
 	}
@@ -207,6 +211,7 @@ static void wireguardif_process_response_message(struct wireguard_device *device
 	if (wireguard_process_handshake_response(device, peer, response)) {
 		// Packet is good
 		// Update the peer location
+		ESP_LOGI(TAG, "good handshake from %08x:%d", addr->u_addr.ip4.addr, port);
 		update_peer_addr(peer, addr, port);
 
 		wireguard_start_session(peer, true);
@@ -216,6 +221,7 @@ static void wireguardif_process_response_message(struct wireguard_device *device
 		netif_set_link_up(device->netif);
 	} else {
 		// Packet bad
+		ESP_LOGI(TAG, "bad handshake from %08x:%d", addr->u_addr.ip4.addr, port);
 	}
 }
 
@@ -314,7 +320,7 @@ static void wireguardif_process_data_message(struct wireguard_device *device, st
 								ip_addr_copy_from_ip4(dest, iphdr->dest);
 								for (x=0; x < WIREGUARD_MAX_SRC_IPS; x++) {
 									if (peer->allowed_source_ips[x].valid) {
-										if (ip_addr_netcmp(&dest, &peer->allowed_source_ips[x].ip, &peer->allowed_source_ips[x].mask)) {
+										if (ip_addr_netcmp(&dest, &peer->allowed_source_ips[x].ip, ip_2_ip4(&peer->allowed_source_ips[x].mask))) {
 											dest_ok = true;
 											header_len = PP_NTOHS(IPH_LEN(iphdr));
 											break;
@@ -421,20 +427,20 @@ static size_t get_source_addr_port(const ip_addr_t *addr, u16_t port, uint8_t *b
 
 #if LWIP_IPV4
 	if (IP_IS_V4(addr) && (buflen >= 4)) {
-		U32TO8_BIG(buf + result, PP_NTOHL(ip4_addr_get_u32(addr)));
+		U32TO8_BIG(buf + result, PP_NTOHL(ip4_addr_get_u32(ip_2_ip4(addr))));
 		result += 4;
 	}
 #endif
 #if LWIP_IPV6
-	if (IP_IS_V4(addr) && (buflen >= 16)) {
-		U16TO8_BIG(buf + result + 0, IP6_ADDR_BLOCK1(addr));
-		U16TO8_BIG(buf + result + 2, IP6_ADDR_BLOCK2(addr));
-		U16TO8_BIG(buf + result + 4, IP6_ADDR_BLOCK3(addr));
-		U16TO8_BIG(buf + result + 6, IP6_ADDR_BLOCK4(addr));
-		U16TO8_BIG(buf + result + 8, IP6_ADDR_BLOCK5(addr));
-		U16TO8_BIG(buf + result + 10, IP6_ADDR_BLOCK6(addr));
-		U16TO8_BIG(buf + result + 12, IP6_ADDR_BLOCK7(addr));
-		U16TO8_BIG(buf + result + 14, IP6_ADDR_BLOCK8(addr));
+	if (IP_IS_V6(addr) && (buflen >= 16)) {
+		U16TO8_BIG(buf + result + 0, IP6_ADDR_BLOCK1(ip_2_ip6(addr)));
+		U16TO8_BIG(buf + result + 2, IP6_ADDR_BLOCK2(ip_2_ip6(addr)));
+		U16TO8_BIG(buf + result + 4, IP6_ADDR_BLOCK3(ip_2_ip6(addr)));
+		U16TO8_BIG(buf + result + 6, IP6_ADDR_BLOCK4(ip_2_ip6(addr)));
+		U16TO8_BIG(buf + result + 8, IP6_ADDR_BLOCK5(ip_2_ip6(addr)));
+		U16TO8_BIG(buf + result + 10, IP6_ADDR_BLOCK6(ip_2_ip6(addr)));
+		U16TO8_BIG(buf + result + 12, IP6_ADDR_BLOCK7(ip_2_ip6(addr)));
+		U16TO8_BIG(buf + result + 14, IP6_ADDR_BLOCK8(ip_2_ip6(addr)));
 		result += 16;
 	}
 #endif
@@ -545,11 +551,12 @@ void wireguardif_network_rx(void *arg, struct udp_pcb *pcb, struct pbuf *p, cons
 	struct message_transport_data *msg_data;
 
 	uint8_t type = wireguard_get_message_type(data, len);
+	ESP_LOGV(TAG, "network_rx: %08x:%d", addr->u_addr.ip4.addr, port);
 
 	switch (type) {
 		case MESSAGE_HANDSHAKE_INITIATION:
 			msg_initiation = (struct message_handshake_initiation *)data;
-
+			ESP_LOGI(TAG, "HANDSHAKE_INITIATION: %08x:%d", addr->u_addr.ip4.addr, port);
 			// Check mac1 (and optionally mac2) are correct - note it may internally generate a cookie reply packet
 			if (wireguardif_check_initiation_message(device, msg_initiation, addr, port)) {
 
@@ -565,6 +572,7 @@ void wireguardif_network_rx(void *arg, struct udp_pcb *pcb, struct pbuf *p, cons
 			break;
 
 		case MESSAGE_HANDSHAKE_RESPONSE:
+			ESP_LOGI(TAG, "HANDSHAKE_RESPONSE: %08x:%d", addr->u_addr.ip4.addr, port);
 			msg_response = (struct message_handshake_response *)data;
 
 			// Check mac1 (and optionally mac2) are correct - note it may internally generate a cookie reply packet
@@ -579,6 +587,7 @@ void wireguardif_network_rx(void *arg, struct udp_pcb *pcb, struct pbuf *p, cons
 			break;
 
 		case MESSAGE_COOKIE_REPLY:
+			ESP_LOGI(TAG, "COOKIE_REPLY: %08x:%d", addr->u_addr.ip4.addr, port);
 			msg_cookie = (struct message_cookie_reply *)data;
 			peer = peer_lookup_by_handshake(device, msg_cookie->receiver);
 			if (peer) {
@@ -592,6 +601,8 @@ void wireguardif_network_rx(void *arg, struct udp_pcb *pcb, struct pbuf *p, cons
 			break;
 
 		case MESSAGE_TRANSPORT_DATA:
+			ESP_LOGV(TAG, "TRANSPORT_DATA: %08x:%d", addr->u_addr.ip4.addr, port);
+
 			msg_data = (struct message_transport_data *)data;
 			peer = peer_lookup_by_receiver(device, msg_data->receiver);
 			if (peer) {
@@ -617,6 +628,7 @@ static err_t wireguard_start_handshake(struct netif *netif, struct wireguard_pee
 	pbuf = wireguardif_initiate_handshake(device, peer, &msg, &result);
 	if (pbuf) {
 		result = wireguardif_peer_output(netif, pbuf, peer);
+		ESP_LOGI(TAG, "start handshake %08x,%d - %d", peer->ip.u_addr.ip4.addr, peer->port, result);
 		pbuf_free(pbuf);
 		peer->send_handshake = false;
 		peer->last_initiation_tx = wireguard_sys_now();
@@ -773,7 +785,7 @@ err_t wireguardif_add_peer(struct netif *netif, struct wireguardif_peer *p, u8_t
 	}
 
 	uint32_t t2 = wireguard_sys_now();
-	printf("Adding peer took %ldms\r\n", (t2-t1));
+	printf("Adding peer took %ums\r\n", (t2-t1));
 
 	if (peer_index) {
 		if (peer) {
@@ -836,7 +848,7 @@ static void wireguardif_tmr(void *arg) {
 	int x;
 	// Reschedule this timer
 	sys_timeout(WIREGUARDIF_TIMER_MSECS, wireguardif_tmr, device);
-
+	
 	// Check periodic things
 	bool link_up = false;
 	for (x=0; x < WIREGUARD_MAX_PEERS; x++) {
@@ -886,6 +898,13 @@ err_t wireguardif_init(struct netif *netif) {
 	uint8_t private_key[WIREGUARD_PRIVATE_KEY_LEN];
 	size_t private_key_len = sizeof(private_key);
 
+	char lwip_netif_name[8] = {0,};
+	esp_netif_get_netif_impl_name( esp_netif_get_handle_from_ifkey("WIFI_STA_DEF"), lwip_netif_name);
+	ESP_LOGI(TAG, "WIFI NETIF: %s", lwip_netif_name);
+
+	struct netif* underlying_netif = netif_find(lwip_netif_name);
+	ESP_LOGI(TAG, "underlying_netif = %p", underlying_netif);
+
 	LWIP_ASSERT("netif != NULL", (netif != NULL));
 	LWIP_ASSERT("state != NULL", (netif->state != NULL));
 
@@ -911,15 +930,15 @@ err_t wireguardif_init(struct netif *netif) {
 					device = (struct wireguard_device *)mem_calloc(1, sizeof(struct wireguard_device));
 					if (device) {
 						device->netif = netif;
-						if (init_data->bind_netif) {
-							udp_bind_netif(udp, init_data->bind_netif);
-						}
+						device->underlying_netif = underlying_netif;
+						udp_bind_netif(udp, underlying_netif);
+
 						device->udp_pcb = udp;
 						// Per-wireguard netif/device setup
 						uint32_t t1 = wireguard_sys_now();
 						if (wireguard_device_init(device, private_key)) {
 							uint32_t t2 = wireguard_sys_now();
-							printf("Device init took %ldms\r\n", (t2-t1));
+							printf("Device init took %ums\r\n", (t2-t1));
 
 #if LWIP_CHECKSUM_CTRL_PER_NETIF
 							NETIF_SET_CHECKSUM_CTRL(netif, NETIF_CHECKSUM_ENABLE_ALL);
@@ -972,11 +991,11 @@ void wireguardif_peer_init(struct wireguardif_peer *peer) {
 	memset(peer, 0, sizeof(struct wireguardif_peer));
 	// Caller must provide 'public_key'
 	peer->public_key = NULL;
-	ip4_addr_set_any(&peer->endpoint_ip);
+	ip_addr_set_any(false, &peer->endpoint_ip);
 	peer->endport_port = WIREGUARDIF_DEFAULT_PORT;
 	peer->keep_alive = WIREGUARDIF_KEEPALIVE_DEFAULT;
-	ip4_addr_set_any(&peer->allowed_ip);
-	ip4_addr_set_any(&peer->allowed_mask);
+	ip_addr_set_any(false, &peer->allowed_ip);
+	ip_addr_set_any(false, &peer->allowed_mask);
 	memset(peer->greatest_timestamp, 0, sizeof(peer->greatest_timestamp));
 	peer->preshared_key = NULL;
 }
