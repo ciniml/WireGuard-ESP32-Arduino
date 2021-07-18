@@ -1,5 +1,5 @@
 #include <WiFi.h>
-#include <WireGuard.hpp>
+#include <WireGuard-ESP32.h>
 #include <HTTPClient.h>
 
 char ssid[] = "ds9";
