@@ -65,5 +65,4 @@ void wireguard_tai64n_now(uint8_t *output);
 // Is the system under load - i.e. should we generate cookie reply message in response to initiation messages
 bool wireguard_is_under_load();
 
-
 #endif /* _WIREGUARD_PLATFORM_H_ */

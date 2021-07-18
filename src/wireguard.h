@@ -282,5 +282,4 @@ bool wireguard_decrypt_packet(uint8_t *dst, const uint8_t *src, size_t src_len, 
 bool wireguard_base64_decode(const char *str, uint8_t *out, size_t *outlen);
 bool wireguard_base64_encode(const uint8_t *in, size_t inlen, char *out, size_t *outlen);
 
-
 #endif /* _WIREGUARD_H_ */

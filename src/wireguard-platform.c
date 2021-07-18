@@ -35,14 +35,17 @@ uint32_t wireguard_sys_now() {
 	return sys_now();
 }
 
-// CHANGE THIS TO GET THE ACTUAL UNIX TIMESTMP IN MILLIS - HANDSHAKES WILL FAIL IF THIS DOESN'T INCREASE EACH TIME CALLED
 void wireguard_tai64n_now(uint8_t *output) {
 	// See https://cr.yp.to/libtai/tai64.html
 	// 64 bit seconds from 1970 = 8 bytes
 	// 32 bit nano seconds from current second
+	
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	uint64_t millis = (tv.tv_sec * 1000LL + (tv.tv_usec / 1000LL));
 
-	uint64_t millis = sys_now();
-
+	// uint64_t millis = sys_now();
+	
 	// Split into seconds offset + nanos
 	uint64_t seconds = 0x400000000000000aULL + (millis / 1000);
 	uint32_t nanos = (millis % 1000) * 1000;

@@ -45,7 +45,7 @@
 #include "wireguard.h"
 #include "crypto.h"
 #include "esp_log.h"
-#include "esp_netif.h"
+#include "tcpip_adapter.h"
 
 #define WIREGUARDIF_TIMER_MSECS 400
 
@@ -898,11 +898,8 @@ err_t wireguardif_init(struct netif *netif) {
 	uint8_t private_key[WIREGUARD_PRIVATE_KEY_LEN];
 	size_t private_key_len = sizeof(private_key);
 
-	char lwip_netif_name[8] = {0,};
-	esp_netif_get_netif_impl_name( esp_netif_get_handle_from_ifkey("WIFI_STA_DEF"), lwip_netif_name);
-	ESP_LOGI(TAG, "WIFI NETIF: %s", lwip_netif_name);
-
-	struct netif* underlying_netif = netif_find(lwip_netif_name);
+	struct netif* underlying_netif;
+	tcpip_adapter_get_netif(TCPIP_ADAPTER_IF_STA, &underlying_netif);
 	ESP_LOGI(TAG, "underlying_netif = %p", underlying_netif);
 
 	LWIP_ASSERT("netif != NULL", (netif != NULL));
@@ -931,7 +928,7 @@ err_t wireguardif_init(struct netif *netif) {
 					if (device) {
 						device->netif = netif;
 						device->underlying_netif = underlying_netif;
-						udp_bind_netif(udp, underlying_netif);
+						//udp_bind_netif(udp, underlying_netif);
 
 						device->udp_pcb = udp;
 						// Per-wireguard netif/device setup
