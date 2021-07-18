@@ -1,3 +1,8 @@
+/*
+ * WireGuard implementation for ESP32 Arduino by Kenta Ida (fuga@fugafuga.org)
+ * SPDX-License-Identifier: BSD-3-Clause
+ */
+
 #include "wireguard-platform.h"
 
 #include <stdlib.h>
@@ -6,8 +11,6 @@
 #include "mbedtls/entropy.h"
 #include "mbedtls/ctr_drbg.h"
 #include "esp_system.h"
-
-// This file contains a sample Wireguard platform integration
 
 static struct mbedtls_ctr_drbg_context random_context;
 static struct mbedtls_entropy_context entropy_context;
@@ -39,13 +42,14 @@ void wireguard_tai64n_now(uint8_t *output) {
 	// See https://cr.yp.to/libtai/tai64.html
 	// 64 bit seconds from 1970 = 8 bytes
 	// 32 bit nano seconds from current second
-	
+
+	// Get timestamp. Note that the timestamp must be synced by NTP, 
+	//  or at least preserved in NVS, not to go back after reset.
+	// Otherwise, the WireGuard remote peer rejects handshake.
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 	uint64_t millis = (tv.tv_sec * 1000LL + (tv.tv_usec / 1000LL));
 
-	// uint64_t millis = sys_now();
-	
 	// Split into seconds offset + nanos
 	uint64_t seconds = 0x400000000000000aULL + (millis / 1000);
 	uint32_t nanos = (millis % 1000) * 1000;

@@ -1,3 +1,7 @@
+/*
+ * WireGuard implementation for ESP32 Arduino by Kenta Ida (fuga@fugafuga.org)
+ * SPDX-License-Identifier: BSD-3-Clause
+ */
 #pragma once
 #include <IPAddress.h>
 

@@ -1,4 +1,6 @@
 /*
+ * Ported to ESP32 Arduino by Kenta Ida (fuga@fugafuga.org)
+ * The original license is below:
  * Copyright (c) 2021 Daniel Hope (www.floorsense.nz)
  * All rights reserved.
  *

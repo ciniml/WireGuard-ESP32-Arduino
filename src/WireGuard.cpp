@@ -1,3 +1,7 @@
+/*
+ * WireGuard implementation for ESP32 Arduino by Kenta Ida (fuga@fugafuga.org)
+ * SPDX-License-Identifier: BSD-3-Clause
+ */
 #include "WireGuard.hpp"
 
 #include "freertos/FreeRTOS.h"
@@ -89,6 +93,7 @@ void WireGuard::begin(const IPAddress& localIP, const char* privateKey, const ch
 		// Start outbound connection to peer
         ESP_LOGI(TAG, "connecting wireguard...");
 		wireguardif_connect(wg_netif, wireguard_peer_index);
+		// Set default interface to WG device.
         netif_set_default(wg_netif);
 	}
 }
