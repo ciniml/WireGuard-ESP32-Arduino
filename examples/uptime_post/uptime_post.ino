@@ -2,8 +2,9 @@
 #include <WireGuard-ESP32.h>
 #include <HTTPClient.h>
 
-char ssid[] = "ds9";
-char password[] = "hogeFugapiyo";
+// WiFi configuration --- UPDATE this configuration for your WiFi AP
+char ssid[] = "ssid";
+char password[] = "password";
 
 // WireGuard configuration --- UPDATE this configuration from JSON
 char private_key[] = "(Private Key) ";  // [Interface] PrivateKey

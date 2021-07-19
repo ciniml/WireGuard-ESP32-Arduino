@@ -2,7 +2,7 @@
  * WireGuard implementation for ESP32 Arduino by Kenta Ida (fuga@fugafuga.org)
  * SPDX-License-Identifier: BSD-3-Clause
  */
-#include "WireGuard.hpp"
+#include "WireGuard-ESP32.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
