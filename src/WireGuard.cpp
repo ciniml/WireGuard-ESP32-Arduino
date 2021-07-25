@@ -63,13 +63,16 @@ void WireGuard::begin(const IPAddress& localIP, const char* privateKey, const ch
         peer.allowed_mask = allowed_mask;
     }
 	// If we know the endpoint's address can add here
-    {
+    for(int retry = 0; retry < 5; retry++) {
         ip_addr_t endpoint_ip = IPADDR4_INIT_BYTES(0, 0, 0, 0);
         struct addrinfo *res = NULL;
         struct addrinfo hint;
         memset(&hint, 0, sizeof(hint));
         memset(&endpoint_ip, 0, sizeof(endpoint_ip));
-        ESP_ERROR_CHECK(lwip_getaddrinfo(remotePeerAddress, NULL, &hint, &res) == 0 ? ESP_OK : ESP_FAIL);
+        if( lwip_getaddrinfo(remotePeerAddress, NULL, &hint, &res) != 0 ) {
+			vTaskDelay(pdMS_TO_TICKS(2000));
+			continue;
+		}
         struct in_addr addr4 = ((struct sockaddr_in *) (res->ai_addr))->sin_addr;
         inet_addr_to_ip4addr(ip_2_ip4(&endpoint_ip), &addr4);
         lwip_freeaddrinfo(res);
