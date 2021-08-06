@@ -444,6 +444,16 @@ bool wireguard_check_mac2(struct wireguard_device *device, const uint8_t *data, 
 	return result;
 }
 
+void handshake_destroy(struct wireguard_handshake *handshake) {
+	crypto_zero(handshake->ephemeral_private, WIREGUARD_PUBLIC_KEY_LEN);
+	crypto_zero(handshake->remote_ephemeral, WIREGUARD_PUBLIC_KEY_LEN);
+	crypto_zero(handshake->hash, WIREGUARD_HASH_LEN);
+	crypto_zero(handshake->chaining_key, WIREGUARD_HASH_LEN);
+	handshake->remote_index = 0;
+	handshake->local_index = 0;
+	handshake->valid = false;
+}
+
 void keypair_destroy(struct wireguard_keypair *keypair) {
 	crypto_zero(keypair, sizeof(struct wireguard_keypair));
 	keypair->valid = false;
