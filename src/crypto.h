@@ -17,9 +17,6 @@
 #include "crypto/refc/x25519.h"
 #define wireguard_x25519(a,b,c)	x25519(a,b,c,1)
 
-//#include "crypto/cortex/scalarmult.h"
-//#define wireguard_x25519(a,b,c)	crypto_scalarmult_curve25519(a,b,c)
-
 // CHACHA20POLY1305 IMPLEMENTATION
 #include "crypto/refc/chacha20poly1305.h"
 #define wireguard_aead_encrypt(dst,src,srclen,ad,adlen,nonce,key) chacha20poly1305_encrypt(dst,src,srclen,ad,adlen,nonce,key)
