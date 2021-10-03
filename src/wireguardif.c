@@ -863,7 +863,7 @@ static void wireguardif_tmr(void *arg) {
 				keypair_destroy(&peer->next_keypair);
 				keypair_destroy(&peer->curr_keypair);
 				keypair_destroy(&peer->prev_keypair);
-				// TODO: Also destroy handshake?
+				handshake_destroy(&peer->handshake);
 
 				// Revert back to default IP/port if these were altered
 				peer->ip = peer->connect_ip;
