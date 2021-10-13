@@ -9,7 +9,7 @@ Almost all of this code is based on the [WireGuard Implementation for lwIP](http
 1. Include `WireGuard.hpp` at the early part of the sketch.
 
 ```c++
-#include <WireGuard.hpp>
+#include <WireGuard-ESP32.h>
 ```
 
 2. Define the instance of the `WireGuard` class at module level.
