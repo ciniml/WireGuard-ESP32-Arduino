@@ -109,6 +109,9 @@ struct wireguardif_peer {
 // Initialise a new WireGuard network interface (netif)
 err_t wireguardif_init(struct netif *netif);
 
+// Shutdown a WireGuard network interface (netif)
+void wireguardif_shutdown(struct netif *netif);
+
 // Helper to initialise the peer struct with defaults
 void wireguardif_peer_init(struct wireguardif_peer *peer);
 
