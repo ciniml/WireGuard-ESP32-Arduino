@@ -1,6 +1,5 @@
 #include <WiFi.h>
 #include <WireGuard-ESP32.h>
-#include <HTTPClient.h>
 
 // WiFi configuration --- UPDATE this configuration for your WiFi AP
 char ssid[] = "MyWifiESSID";
