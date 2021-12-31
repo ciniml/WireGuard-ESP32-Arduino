@@ -13,7 +13,6 @@ char endpoint_address[] = "192.168.178.133"; // IP of Wireguard endpoint to conn
 int endpoint_port = 19628;
 
 static WireGuard wg;
-static HTTPClient httpClient;
 
 void setup()
 {
