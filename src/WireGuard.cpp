@@ -29,12 +29,12 @@ static uint8_t wireguard_peer_index = WIREGUARDIF_INVALID_INDEX;
 
 #define TAG "[WireGuard] "
 
-bool WireGuard::begin(const IPAddress& localIP, const char* privateKey, const char* remotePeerAddress, const char* remotePeerPublicKey, uint16_t remotePeerPort) {
+bool WireGuard::begin(const IPAddress& localIP, const IPAddress& Subnet, const IPAddress& Gateway, const char* privateKey, const char* remotePeerAddress, const char* remotePeerPublicKey, uint16_t remotePeerPort) {
 	struct wireguardif_init_data wg;
 	struct wireguardif_peer peer;
 	ip_addr_t ipaddr = IPADDR4_INIT(static_cast<uint32_t>(localIP));
-	ip_addr_t netmask = IPADDR4_INIT_BYTES(255, 255, 255, 255);
-	ip_addr_t gateway = IPADDR4_INIT_BYTES(0, 0, 0, 0);
+	ip_addr_t netmask = IPADDR4_INIT(static_cast<uint32_t>(Subnet));
+	ip_addr_t gateway = IPADDR4_INIT(static_cast<uint32_t>(Gateway));
 
 	assert(privateKey != NULL);
 	assert(remotePeerAddress != NULL);
@@ -117,6 +117,13 @@ bool WireGuard::begin(const IPAddress& localIP, const char* privateKey, const ch
 
 	this->_is_initialized = true;
 	return true;
+}
+
+bool WireGuard::begin(const IPAddress& localIP, const char* privateKey, const char* remotePeerAddress, const char* remotePeerPublicKey, uint16_t remotePeerPort) {
+	// Maintain compatiblity with old begin 
+	auto subnet = IPAddress(255,255,255,255);
+	auto gateway = IPAddress(0,0,0,0);
+	return WireGuard::begin(localIP, subnet, gateway, privateKey, remotePeerAddress, remotePeerPublicKey, remotePeerPort);
 }
 
 void WireGuard::end() {
