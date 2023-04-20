@@ -921,7 +921,7 @@ err_t wireguardif_init(struct netif *netif) {
 	size_t private_key_len = sizeof(private_key);
 
 	struct netif* underlying_netif;
-	tcpip_adapter_get_netif(TCPIP_ADAPTER_IF_STA, &underlying_netif);
+	tcpip_adapter_get_netif(TCPIP_ADAPTER_IF_STA, (void **)&underlying_netif);
 	log_i(TAG "underlying_netif = %p", underlying_netif);
 
 	LWIP_ASSERT("netif != NULL", (netif != NULL));
