@@ -48,7 +48,7 @@
 #include "wireguard.h"
 #include "crypto.h"
 #include "esp_log.h"
-#include "tcpip_adapter.h"
+#include "esp_netif.h"
 
 #include "esp32-hal-log.h"
 
