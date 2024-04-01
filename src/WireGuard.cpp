@@ -14,6 +14,8 @@
 #include "lwip/ip.h"
 #include "lwip/netdb.h"
 
+#include "tcpip_adapter.h"
+
 #include "esp32-hal-log.h"
 
 extern "C" {
@@ -29,7 +31,15 @@ static uint8_t wireguard_peer_index = WIREGUARDIF_INVALID_INDEX;
 
 #define TAG "[WireGuard] "
 
-bool WireGuard::begin(const IPAddress& localIP, const IPAddress& Subnet, const IPAddress& Gateway, const char* privateKey, const char* remotePeerAddress, const char* remotePeerPublicKey, uint16_t remotePeerPort) {
+bool WireGuard::begin(WireGuardConfig *config) {
+  IPAddress localIP = config->localIP;
+  IPAddress Subnet = config->subnet;
+  IPAddress Gateway = config->gateway;
+  const char* privateKey = config->privateKey;
+  const char* remotePeerAddress = config->peerHost;
+  const char* remotePeerPublicKey = config->peerPublickKey;
+  uint16_t remotePeerPort = config->peerPort;
+
 	struct wireguardif_init_data wg;
 	struct wireguardif_peer peer;
 	ip_addr_t ipaddr = IPADDR4_INIT(static_cast<uint32_t>(localIP));
@@ -43,9 +53,14 @@ bool WireGuard::begin(const IPAddress& localIP, const IPAddress& Subnet, const I
 
 	// Setup the WireGuard device structure
 	wg.private_key = privateKey;
-    wg.listen_port = remotePeerPort;
+  wg.listen_port = remotePeerPort;
 	
-	wg.bind_netif = NULL;
+  if (config->underlineNetif) {
+	  wg.bind_netif = config->underlineNetif;
+  } else {
+    tcpip_adapter_get_netif(TCPIP_ADAPTER_IF_STA, (void **)&wg.bind_netif);
+    log_i(TAG "underlying_netif = %p", wg.bind_netif);
+  }
 
 	// Initialise the first WireGuard peer structure
 	wireguardif_peer_init(&peer);
@@ -117,6 +132,20 @@ bool WireGuard::begin(const IPAddress& localIP, const IPAddress& Subnet, const I
 
 	this->_is_initialized = true;
 	return true;
+}
+
+bool WireGuard::begin(const IPAddress& localIP, const IPAddress& Subnet, const IPAddress& Gateway, const char* privateKey, const char* remotePeerAddress, const char* remotePeerPublicKey, uint16_t remotePeerPort) {
+  WireGuardConfig config = {
+    .localIP = localIP,
+    .gateway = Gateway,
+    .subnet = Subnet,
+    .privateKey = privateKey,
+    .peerHost = remotePeerAddress,
+    .peerPort = remotePeerPort,
+    .peerPublickKey = remotePeerPublicKey,
+    .underlineNetif = NULL,
+  };
+  return WireGuard::begin(&config);
 }
 
 bool WireGuard::begin(const IPAddress& localIP, const char* privateKey, const char* remotePeerAddress, const char* remotePeerPublicKey, uint16_t remotePeerPort) {

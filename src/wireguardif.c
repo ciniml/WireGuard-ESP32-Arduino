@@ -920,10 +920,6 @@ err_t wireguardif_init(struct netif *netif) {
 	uint8_t private_key[WIREGUARD_PRIVATE_KEY_LEN];
 	size_t private_key_len = sizeof(private_key);
 
-	struct netif* underlying_netif;
-	tcpip_adapter_get_netif(TCPIP_ADAPTER_IF_STA, &underlying_netif);
-	log_i(TAG "underlying_netif = %p", underlying_netif);
-
 	LWIP_ASSERT("netif != NULL", (netif != NULL));
 	LWIP_ASSERT("state != NULL", (netif->state != NULL));
 
@@ -950,7 +946,7 @@ err_t wireguardif_init(struct netif *netif) {
 					device = (struct wireguard_device *)mem_calloc(1, sizeof(struct wireguard_device));
 					if (device) {
 						device->netif = netif;
-						device->underlying_netif = underlying_netif;
+						device->underlying_netif = init_data->bind_netif;
 						//udp_bind_netif(udp, underlying_netif);
 
 						device->udp_pcb = udp;
