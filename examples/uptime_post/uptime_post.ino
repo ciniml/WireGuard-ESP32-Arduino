@@ -49,7 +49,7 @@ void loop()
     }
     
     uint64_t uptime_msec = millis();
-    Serial.printf("Sending uptime %lu [ms]\r\n", uptime_msec);
+    Serial.printf("Sending uptime %llu [ms]\r\n", uptime_msec);
     String json;
     json += "{\"uptime_msec\":";
     json.concat(static_cast<unsigned long>(uptime_msec));

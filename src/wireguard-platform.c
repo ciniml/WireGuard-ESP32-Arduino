@@ -34,7 +34,6 @@ void wireguard_platform_init() {
 }
 
 void wireguard_random_bytes(void *bytes, size_t size) {
-	uint8_t *out = (uint8_t *)bytes;
 	mbedtls_ctr_drbg_random(&random_context, bytes, size);
 }
 

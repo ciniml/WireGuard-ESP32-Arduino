@@ -1,1 +1,4 @@
 build.sh
+.pio/
+.vscode/
+.env

@@ -48,13 +48,15 @@
 #include "wireguard.h"
 #include "crypto.h"
 #include "esp_log.h"
-#include "tcpip_adapter.h"
+#include "esp_netif.h"
 
 #include "esp32-hal-log.h"
 
 #define WIREGUARDIF_TIMER_MSECS 400
 
 #define TAG "[WireGuard] "
+
+extern void handshake_destroy(struct wireguard_handshake *handshake);
 
 static void update_peer_addr(struct wireguard_peer *peer, const ip_addr_t *addr, u16_t port) {
 	peer->ip = *addr;
@@ -201,8 +203,10 @@ static err_t wireguardif_output(struct netif *netif, struct pbuf *q, const ip4_a
 	ip_addr_copy_from_ip4(ipaddr, *ip4addr);
 	struct wireguard_peer *peer = peer_lookup_by_allowed_ip(device, &ipaddr);
 	if (peer) {
+		log_i(TAG "tx route dst=%s via peer (allowed match)", ipaddr_ntoa(&ipaddr));
 		return wireguardif_output_to_peer(netif, q, &ipaddr, peer);
 	} else {
+		log_i(TAG "tx route miss dst=%s (no AllowedIPs peer match)", ipaddr_ntoa(&ipaddr));
 		return ERR_RTE;
 	}
 }
@@ -322,7 +326,7 @@ static void wireguardif_process_data_message(struct wireguard_device *device, st
 							// Also check packet length!
 #if LWIP_IPV4
 							if (IPH_V(iphdr) == 4) {
-								ip_addr_copy_from_ip4(dest, iphdr->dest);
+								ip_addr_copy_from_ip4(dest, iphdr->src);
 								for (x=0; x < WIREGUARD_MAX_SRC_IPS; x++) {
 									if (peer->allowed_source_ips[x].valid) {
 										if (ip_addr_netcmp(&dest, &peer->allowed_source_ips[x].ip, ip_2_ip4(&peer->allowed_source_ips[x].mask))) {
@@ -331,6 +335,19 @@ static void wireguardif_process_data_message(struct wireguard_device *device, st
 											break;
 										}
 									}
+								}
+								if (!dest_ok) {
+									log_i(TAG "rx drop src=%s (no AllowedIPs source match)", ipaddr_ntoa(&dest));
+									for (x=0; x < WIREGUARD_MAX_SRC_IPS; x++) {
+										if (peer->allowed_source_ips[x].valid) {
+											log_i(TAG "allowed[%d]=%s mask=%s",
+												x,
+												ipaddr_ntoa(&peer->allowed_source_ips[x].ip),
+												ipaddr_ntoa(&peer->allowed_source_ips[x].mask));
+										}
+									}
+								} else {
+									log_i(TAG "rx pass src=%s (AllowedIPs source match)", ipaddr_ntoa(&dest));
 								}
 							}
 #endif /* LWIP_IPV4 */
@@ -749,7 +766,7 @@ err_t wireguardif_add_peer(struct netif *netif, struct wireguardif_peer *p, u8_t
 	size_t public_key_len = sizeof(public_key);
 	struct wireguard_peer *peer = NULL;
 
-	uint32_t t1 = wireguard_sys_now();
+	wireguard_sys_now();
 
 	if (wireguard_base64_decode(p->public_key, public_key, &public_key_len)
 			&& (public_key_len == WIREGUARD_PUBLIC_KEY_LEN)) {
@@ -764,7 +781,7 @@ err_t wireguardif_add_peer(struct netif *netif, struct wireguardif_peer *p, u8_t
 				if (wireguard_peer_init(device, peer, public_key, p->preshared_key)) {
 
 					peer->connect_ip = p->endpoint_ip;
-					peer->connect_port = p->endport_port;
+					peer->connect_port = p->endpoint_port;
 					peer->ip = peer->connect_ip;
 					peer->port = peer->connect_port;
 					if (p->keep_alive == WIREGUARDIF_KEEPALIVE_DEFAULT) {
@@ -783,13 +800,17 @@ err_t wireguardif_add_peer(struct netif *netif, struct wireguardif_peer *p, u8_t
 				result = ERR_MEM;
 			}
 		} else {
-			result = ERR_OK;
+			if (peer_add_ip(peer, p->allowed_ip, p->allowed_mask)) {
+				result = ERR_OK;
+			} else {
+				result = ERR_MEM;
+			}
 		}
 	} else {
 		result = ERR_ARG;
 	}
 
-	uint32_t t2 = wireguard_sys_now();
+	wireguard_sys_now();
 	log_i(TAG "Adding peer took %ums\r\n", (t2-t1));
 
 	if (peer_index) {
@@ -919,10 +940,7 @@ err_t wireguardif_init(struct netif *netif) {
 	struct udp_pcb *udp;
 	uint8_t private_key[WIREGUARD_PRIVATE_KEY_LEN];
 	size_t private_key_len = sizeof(private_key);
-
 	struct netif* underlying_netif;
-	tcpip_adapter_get_netif(TCPIP_ADAPTER_IF_STA, &underlying_netif);
-	log_i(TAG "underlying_netif = %p", underlying_netif);
 
 	LWIP_ASSERT("netif != NULL", (netif != NULL));
 	LWIP_ASSERT("state != NULL", (netif->state != NULL));
@@ -938,6 +956,15 @@ err_t wireguardif_init(struct netif *netif) {
 
 		// Clear out and set if function is successful
 		netif->state = NULL;
+
+		// underlying_netif from bind_netif or fallback to STA
+		if (init_data->bind_netif != NULL) {
+			underlying_netif = init_data->bind_netif;
+			log_i(TAG "underlying_netif = %p (from bind_netif)", underlying_netif);
+		} else {
+			tcpip_adapter_get_netif(TCPIP_ADAPTER_IF_STA, (void **)&underlying_netif);
+			log_i(TAG "underlying_netif = %p (from TCPIP_ADAPTER_IF_STA)", underlying_netif);
+		}
 
 		if (wireguard_base64_decode(init_data->private_key, private_key, &private_key_len)
 				&& (private_key_len == WIREGUARD_PRIVATE_KEY_LEN)) {
@@ -956,9 +983,9 @@ err_t wireguardif_init(struct netif *netif) {
 						device->udp_pcb = udp;
 						log_d(TAG "start device initialization");
 						// Per-wireguard netif/device setup
-						uint32_t t1 = wireguard_sys_now();
+						wireguard_sys_now();
 						if (wireguard_device_init(device, private_key)) {
-							uint32_t t2 = wireguard_sys_now();
+							wireguard_sys_now();
 							log_d(TAG "Device init took %ums\r\n", (t2-t1));
 
 #if LWIP_CHECKSUM_CTRL_PER_NETIF
@@ -1019,7 +1046,7 @@ void wireguardif_peer_init(struct wireguardif_peer *peer) {
 	// Caller must provide 'public_key'
 	peer->public_key = NULL;
 	ip_addr_set_any(false, &peer->endpoint_ip);
-	peer->endport_port = WIREGUARDIF_DEFAULT_PORT;
+	peer->endpoint_port = WIREGUARDIF_DEFAULT_PORT;
 	peer->keep_alive = WIREGUARDIF_KEEPALIVE_DEFAULT;
 	ip_addr_set_any(false, &peer->allowed_ip);
 	ip_addr_set_any(false, &peer->allowed_mask);
