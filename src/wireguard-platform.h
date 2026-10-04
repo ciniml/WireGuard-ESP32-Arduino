@@ -51,7 +51,9 @@
 // Your platform integration needs to provide implementations of these functions
 //
 
-void wireguard_platform_init();
+// Returns true on success. On ESP32 this seeds the CTR-DRBG used for key
+// generation; if seeding fails the caller should abort bringing up the tunnel.
+bool wireguard_platform_init();
 
 // The number of milliseconds since system boot - for LwIP systems this could be sys_now()
 uint32_t wireguard_sys_now();

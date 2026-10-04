@@ -22,20 +22,26 @@ static int entropy_hw_random_source( void *data, unsigned char *output, size_t l
     return 0;
 }
 
-void wireguard_platform_init() {
-	if( is_platform_initialized ) return;
+bool wireguard_platform_init() {
+	if( is_platform_initialized ) return true;
 
 	mbedtls_entropy_init(&entropy_context);
 	mbedtls_ctr_drbg_init(&random_context);
 	mbedtls_entropy_add_source(&entropy_context, entropy_hw_random_source, NULL, 134, MBEDTLS_ENTROPY_SOURCE_STRONG);
-	mbedtls_ctr_drbg_seed(&random_context, mbedtls_entropy_func, &entropy_context, NULL, 0);
+	if (mbedtls_ctr_drbg_seed(&random_context, mbedtls_entropy_func, &entropy_context, NULL, 0) != 0) {
+		// Seeding failed - do not mark as initialized so the caller can bail out.
+		return false;
+	}
 
 	is_platform_initialized = true;
+	return true;
 }
 
 void wireguard_random_bytes(void *bytes, size_t size) {
-	uint8_t *out = (uint8_t *)bytes;
-	mbedtls_ctr_drbg_random(&random_context, bytes, size);
+	if (mbedtls_ctr_drbg_random(&random_context, (unsigned char *)bytes, size) != 0) {
+		// Fall back to the hardware RNG so we never hand back predictable bytes.
+		esp_fill_random(bytes, size);
+	}
 }
 
 uint32_t wireguard_sys_now() {

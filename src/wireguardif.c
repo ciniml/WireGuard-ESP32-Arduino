@@ -44,11 +44,12 @@
 #include "lwip/mem.h"
 #include "lwip/sys.h"
 #include "lwip/timeouts.h"
+#include "lwip/tcpip.h"
 
 #include "wireguard.h"
 #include "crypto.h"
 #include "esp_log.h"
-#include "tcpip_adapter.h"
+#include "esp_netif.h"
 
 #include "esp32-hal-log.h"
 
@@ -88,11 +89,14 @@ static err_t wireguardif_peer_output(struct netif *netif, struct pbuf *q, struct
 	struct wireguard_device *device = (struct wireguard_device *)netif->state;
 	// Send to last know port, not the connect port
 	//TODO: Support DSCP and ECN - lwip requires this set on PCB globally, not per packet
-	return udp_sendto_if(device->udp_pcb, q, &peer->ip, peer->port, device->underlying_netif);
+	err_t err = udp_sendto_if(device->udp_pcb, q, &peer->ip, peer->port, device->underlying_netif);
+
+	return err;
 }
 
 static err_t wireguardif_device_output(struct wireguard_device *device, struct pbuf *q, const ip_addr_t *ipaddr, u16_t port) {
-	return udp_sendto_if(device->udp_pcb, q, ipaddr, port, device->underlying_netif);
+	err_t err = udp_sendto_if(device->udp_pcb, q, ipaddr, port, device->underlying_netif);
+	return err;
 }
 
 static err_t wireguardif_output_to_peer(struct netif *netif, struct pbuf *q, const ip_addr_t *ipaddr, struct wireguard_peer *peer) {
@@ -556,7 +560,7 @@ void wireguardif_network_rx(void *arg, struct udp_pcb *pcb, struct pbuf *p, cons
 	struct message_transport_data *msg_data;
 
 	uint8_t type = wireguard_get_message_type(data, len);
-	ESP_LOGV(TAG, "network_rx: %08x:%d", addr->u_addr.ip4.addr, port);
+	log_d(TAG "network_rx: %08x:%d", addr->u_addr.ip4.addr, port);
 
 	switch (type) {
 		case MESSAGE_HANDSHAKE_INITIATION:
@@ -606,7 +610,7 @@ void wireguardif_network_rx(void *arg, struct udp_pcb *pcb, struct pbuf *p, cons
 			break;
 
 		case MESSAGE_TRANSPORT_DATA:
-			ESP_LOGV(TAG, "TRANSPORT_DATA: %08x:%d", addr->u_addr.ip4.addr, port);
+			log_d(TAG "TRANSPORT_DATA: %08x:%d", addr->u_addr.ip4.addr, port);
 
 			msg_data = (struct message_transport_data *)data;
 			peer = peer_lookup_by_receiver(device, msg_data->receiver);
@@ -920,9 +924,7 @@ err_t wireguardif_init(struct netif *netif) {
 	uint8_t private_key[WIREGUARD_PRIVATE_KEY_LEN];
 	size_t private_key_len = sizeof(private_key);
 
-	struct netif* underlying_netif;
-	tcpip_adapter_get_netif(TCPIP_ADAPTER_IF_STA, &underlying_netif);
-	log_i(TAG "underlying_netif = %p", underlying_netif);
+	struct netif *underlying_netif = NULL;
 
 	LWIP_ASSERT("netif != NULL", (netif != NULL));
 	LWIP_ASSERT("state != NULL", (netif->state != NULL));
@@ -936,16 +938,39 @@ err_t wireguardif_init(struct netif *netif) {
 		// The init data is passed into the netif_add call as the 'state' - we will replace this with our private state data
 		init_data = (struct wireguardif_init_data *)netif->state;
 
+		// Resolve the underlying (transport) netif. Prefer the caller-provided
+		// bind_netif; fall back to the WiFi station interface by if-key for
+		// backward compatibility. Note: this function runs under the TCPIP core
+		// lock (called from netif_add), so the esp_netif fallback below should
+		// normally not be exercised - callers are expected to set bind_netif.
+		underlying_netif = init_data->bind_netif;
+		if (underlying_netif == NULL) {
+			char lwip_netif_name[8] = {0};
+			esp_netif_t *netif_handle = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+			if (netif_handle != NULL &&
+			    esp_netif_get_netif_impl_name(netif_handle, lwip_netif_name) == ESP_OK) {
+				underlying_netif = netif_find(lwip_netif_name);
+			}
+		}
+		if (underlying_netif == NULL) {
+			log_e(TAG "cannot resolve underlying netif");
+			netif->state = NULL;
+			result = ERR_IF;
+			goto fail;
+		}
+		log_i(TAG "underlying_netif = %p", underlying_netif);
+
 		// Clear out and set if function is successful
 		netif->state = NULL;
 
 		if (wireguard_base64_decode(init_data->private_key, private_key, &private_key_len)
 				&& (private_key_len == WIREGUARD_PRIVATE_KEY_LEN)) {
-
+			
 			udp = udp_new();
 
 			if (udp) {
 				result = udp_bind(udp, IP_ADDR_ANY, init_data->listen_port); // Note this listens on all interfaces! Really just want the passed netif
+
 				if (result == ERR_OK) {
 					device = (struct wireguard_device *)mem_calloc(1, sizeof(struct wireguard_device));
 					if (device) {
@@ -1010,6 +1035,7 @@ err_t wireguardif_init(struct netif *netif) {
 		log_e(TAG "netif or state is NULL: netif=%p, netif.state:%p", netif, netif ? netif->state : NULL);
 		result = ERR_ARG;
 	}
+fail:
 	return result;
 }
 

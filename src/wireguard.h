@@ -256,6 +256,8 @@ struct wireguard_peer *peer_lookup_by_handshake(struct wireguard_device *device,
 
 void wireguard_start_session(struct wireguard_peer *peer, bool initiator);
 
+void handshake_destroy(struct wireguard_handshake *handshake);
+
 void keypair_update(struct wireguard_peer *peer, struct wireguard_keypair *received_keypair);
 void keypair_destroy(struct wireguard_keypair *keypair);
 
