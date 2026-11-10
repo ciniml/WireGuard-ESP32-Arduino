@@ -33,6 +33,7 @@
  * Author: Daniel Hope <daniel.hope@smartalock.com>
  */
 
+#include <limits.h>
 #include "wireguard.h"
 
 #include <stdbool.h>
@@ -322,9 +323,12 @@ static void wireguard_kdf3(uint8_t *tau1, uint8_t *tau2, uint8_t *tau3, const ui
 bool wireguard_check_replay(struct wireguard_keypair *keypair, uint64_t seq) {
 	// Implementation of packet replay window - as per RFC2401
 	// Adapted from code in Appendix C at https://tools.ietf.org/html/rfc2401
-	uint32_t diff;
+	uint64_t diff; // a 64-bit counter distance must not wrap into the window
 	bool result = false;
-	size_t ReplayWindowSize = sizeof(keypair->replay_bitmap); // 32 bits
+	size_t ReplayWindowSize = sizeof(keypair->replay_bitmap) * CHAR_BIT; // 32 bits
+
+	// WireGuard data packet counter starts from 0 but algorithm expects packet numbers to start from 1
+	seq++;
 
 	if (seq != 0) {
 		if (seq > keypair->replay_counter) {
