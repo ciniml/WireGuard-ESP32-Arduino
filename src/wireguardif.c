@@ -265,7 +265,7 @@ static void wireguardif_process_data_message(struct wireguard_device *device, st
 	size_t src_len;
 	struct pbuf *pbuf;
 	struct ip_hdr *iphdr;
-	ip_addr_t dest;
+	ip_addr_t inner_src;
 	bool dest_ok = false;
 	int x;
 	uint32_t now;
@@ -291,7 +291,11 @@ static void wireguardif_process_data_message(struct wireguard_device *device, st
 			if (pbuf) {
 				// Decrypt the packet
 				memset(pbuf->payload, 0, pbuf->tot_len);
-				if (wireguard_decrypt_packet(pbuf->payload, src, src_len, nonce, keypair)) {
+				// Check for packet replay / dupes only AFTER the packet has authenticated (a forged packet must not move the
+				// window), and before it may change any state: endpoint, last_rx, keypair promotion. This covers every packet,
+				// including zero-length keepalives, so a captured packet resent from another address cannot redirect the peer.
+				// Same order as the Linux implementation (counter_validate() before the endpoint update).
+				if (wireguard_decrypt_packet(pbuf->payload, src, src_len, nonce, keypair) && wireguard_check_replay(keypair, nonce)) {
 
 					// 3. Since the packet has authenticated correctly, the source IP of the outer UDP/IP packet is used to update the endpoint for peer TrMv...WXX0.
 					// Update the peer location
@@ -315,46 +319,41 @@ static void wireguardif_process_data_message(struct wireguard_device *device, st
 					if (pbuf->tot_len > 0) {
 						//4a. Once the packet payload is decrypted, the interface has a plaintext packet. If this is not an IP packet, it is dropped.
 						iphdr = (struct ip_hdr *)pbuf->payload;
-						// Check for packet replay / dupes
-						if (wireguard_check_replay(keypair, nonce)) {
 
-							// 4b. Otherwise, WireGuard checks to see if the source IP address of the plaintext inner-packet routes correspondingly in the cryptokey routing table
-							// Also check packet length!
+						// 4b. Otherwise, WireGuard checks to see if the source IP address of the plaintext inner-packet routes correspondingly in the cryptokey routing table
+						// Also check packet length! An inner packet shorter than an IP header is not read as one.
 #if LWIP_IPV4
-							if (IPH_V(iphdr) == 4) {
-								ip_addr_copy_from_ip4(dest, iphdr->dest);
-								for (x=0; x < WIREGUARD_MAX_SRC_IPS; x++) {
-									if (peer->allowed_source_ips[x].valid) {
-										if (ip_addr_netcmp(&dest, &peer->allowed_source_ips[x].ip, ip_2_ip4(&peer->allowed_source_ips[x].mask))) {
-											dest_ok = true;
-											header_len = PP_NTOHS(IPH_LEN(iphdr));
-											break;
-										}
+						if ((pbuf->tot_len >= IP_HLEN) && (IPH_V(iphdr) == 4)) {
+							ip_addr_copy_from_ip4(inner_src, iphdr->src);
+							for (x=0; x < WIREGUARD_MAX_SRC_IPS; x++) {
+								if (peer->allowed_source_ips[x].valid) {
+									if (ip_addr_netcmp(&inner_src, &peer->allowed_source_ips[x].ip, ip_2_ip4(&peer->allowed_source_ips[x].mask))) {
+										dest_ok = true;
+										header_len = PP_NTOHS(IPH_LEN(iphdr));
+										break;
 									}
 								}
 							}
+						}
 #endif /* LWIP_IPV4 */
 #if LWIP_IPV6
-							if (IPH_V(iphdr) == 6) {
-								// TODO: IPV6 support for route filtering
-								header_len = PP_NTOHS(IPH_LEN(iphdr));
-								dest_ok = true;
-							}
+						if ((pbuf->tot_len >= IP6_HLEN) && (IPH_V(iphdr) == 6)) {
+							// TODO: IPV6 support for route filtering
+							header_len = PP_NTOHS(IPH_LEN(iphdr));
+							dest_ok = true;
+						}
 #endif /* LWIP_IPV6 */
-							if (header_len <= pbuf->tot_len) {
+						if (header_len <= pbuf->tot_len) {
 
-								// 5. If the plaintext packet has not been dropped, it is inserted into the receive queue of the wg0 interface.
-								if (dest_ok) {
-									// Send packet to be process by LWIP
-									ip_input(pbuf, device->netif);
-									// pbuf is owned by IP layer now
-									pbuf = NULL;
-								}
-							} else {
-								// IP header is corrupt or lied about packet size
+							// 5. If the plaintext packet has not been dropped, it is inserted into the receive queue of the wg0 interface.
+							if (dest_ok) {
+								// Send packet to be process by LWIP
+								ip_input(pbuf, device->netif);
+								// pbuf is owned by IP layer now
+								pbuf = NULL;
 							}
 						} else {
-							// This is a duplicate packet / replayed / too far out of order
+							// IP header is corrupt or lied about packet size
 						}
 					} else {
 						// This was a keep-alive packet
@@ -597,8 +596,8 @@ void wireguardif_network_rx(void *arg, struct udp_pcb *pcb, struct pbuf *p, cons
 			peer = peer_lookup_by_handshake(device, msg_cookie->receiver);
 			if (peer) {
 				if (wireguard_process_cookie_message(device, peer, msg_cookie)) {
-					// Update the peer location
-					update_peer_addr(peer, addr, port);
+					// The cookie is encrypted with a key derived from the responder's public key, so anyone who knows that key
+					// and saw the initiation can forge a reply: it may update the cookie, never the peer endpoint.
 
 					// Don't send anything out - we stay quiet until the next initiation message
 				}
